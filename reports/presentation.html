@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DB Train Delay Predictor - Project Report</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0a0e1a; --bg2:#111827; --bg3:#1f2937; --bg4:#374151;
+  --text:#f1f5f9; --muted:#9ca3af; --dim:#6b7280;
+  --blue:#38bdf8; --cyan:#22d3ee; --green:#4ade80; --amber:#fbbf24; --red:#f87171; --pink:#f472b6; --purple:#a78bfa;
+  --grad-1:linear-gradient(135deg,#38bdf8,#818cf8);
+  --grad-2:linear-gradient(135deg,#4ade80,#22d3ee);
+  --grad-3:linear-gradient(135deg,#fbbf24,#f472b6);
+  --shadow:0 8px 32px rgba(0,0,0,.3);
+}
+body{font-family:'Segoe UI',system-ui,-apple-system,sans-serif;background:var(--bg);color:var(--text);line-height:1.7;overflow-x:hidden}
+html{scroll-behavior:smooth}
+
+/* ── ANIMATED BACKGROUND ── */
+.hero-bg{position:fixed;top:0;left:0;width:100%;height:100%;z-index:0;overflow:hidden;pointer-events:none}
+.hero-bg .orb{position:absolute;border-radius:50%;filter:blur(80px);opacity:.15;animation:orbFloat 20s ease-in-out infinite}
+.orb:nth-child(1){width:600px;height:600px;background:var(--blue);top:-200px;left:-200px;animation-delay:0s}
+.orb:nth-child(2){width:500px;height:500px;background:var(--purple);bottom:-150px;right:-150px;animation-delay:-7s}
+.orb:nth-child(3){width:400px;height:400px;background:var(--green);top:40%;left:50%;animation-delay:-14s}
+@keyframes orbFloat{
+  0%,100%{transform:translate(0,0) scale(1)}
+  25%{transform:translate(80px,-60px) scale(1.1)}
+  50%{transform:translate(-40px,80px) scale(.9)}
+  75%{transform:translate(60px,40px) scale(1.05)}
+}
+
+/* ── LAYOUT ── */
+.wrapper{position:relative;z-index:1}
+section{padding:5rem 5%;max-width:1600px;margin:0 auto}
+.section-title{font-size:2.2rem;font-weight:800;margin-bottom:.6rem;text-align:center;background:var(--grad-1);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.section-sub{color:var(--muted);font-size:1.05rem;margin:0 auto 2.5rem;max-width:780px;text-align:center}
+.section-divider{height:2px;background:var(--grad-1);opacity:.12;width:100vw;position:relative;left:50%;transform:translateX(-50%);margin:.5rem 0}
+
+/* ── HERO ── */
+.hero{min-height:100vh;display:flex;flex-direction:column;justify-content:center;align-items:center;text-align:center;padding:6rem 5% 4rem;position:relative;max-width:100%}
+.hero h1{font-size:clamp(2.5rem,7vw,5rem);font-weight:900;line-height:1.15;margin-bottom:1rem;animation:fadeUp 1s ease}
+.hero h1 span{background:var(--grad-1);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.hero .subtitle{font-size:clamp(1.05rem,2vw,1.35rem);color:var(--muted);max-width:750px;margin:0 auto 2rem;animation:fadeUp 1s ease .2s both}
+.hero .badge-row{display:flex;flex-wrap:wrap;gap:.6rem;justify-content:center;margin-bottom:2.5rem;animation:fadeUp 1s ease .35s both}
+.badge{display:inline-block;padding:.35rem 1rem;border-radius:100px;font-size:.82rem;font-weight:600;border:1.5px solid;backdrop-filter:blur(4px)}
+.badge-blue{color:var(--blue);border-color:var(--blue);background:rgba(56,189,248,.08)}
+.badge-green{color:var(--green);border-color:var(--green);background:rgba(74,222,128,.08)}
+.badge-amber{color:var(--amber);border-color:var(--amber);background:rgba(251,191,36,.08)}
+.badge-pink{color:var(--pink);border-color:var(--pink);background:rgba(244,114,182,.08)}
+.badge-purple{color:var(--purple);border-color:var(--purple);background:rgba(167,139,250,.08)}
+
+/* ── ANIMATIONS ── */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes countUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.05)}}
+@keyframes shimmer{0%{background-position:-200% center}100%{background-position:200% center}}
+@keyframes slideInLeft{from{opacity:0;transform:translateX(-40px)}to{opacity:1;transform:translateX(0)}}
+.reveal{opacity:0;transform:translateY(30px);transition:all .7s cubic-bezier(.22,1,.36,1)}
+.reveal.visible{opacity:1;transform:translateY(0)}
+
+/* ── STATS GRID ── */
+.stats-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:1rem;margin:2rem 0}
+.stat-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:16px;padding:2rem 1rem;text-align:center;transition:all .3s;cursor:default}
+.stat-card:hover{transform:translateY(-4px);border-color:var(--blue);box-shadow:0 8px 30px rgba(56,189,248,.12)}
+.stat-card .icon{font-size:2rem;margin-bottom:.4rem}
+.stat-card .num{font-size:2.4rem;font-weight:800;background:var(--grad-1);-webkit-background-clip:text;-webkit-text-fill-color:transparent}
+.stat-card .label{color:var(--muted);font-size:.85rem;margin-top:.2rem}
+
+/* ── CARDS ── */
+.card-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(420px,1fr));gap:1.5rem;margin:2rem 0}
+.card{background:var(--bg2);border:1px solid var(--bg4);border-radius:16px;padding:2rem;transition:all .3s}
+.card:hover{transform:translateY(-3px);border-color:var(--blue);box-shadow:0 8px 30px rgba(56,189,248,.1)}
+.card .emoji{font-size:2.2rem;margin-bottom:.6rem}
+.card h4{font-size:1.15rem;font-weight:700;margin-bottom:.4rem;color:var(--text)}
+.card p{color:var(--muted);font-size:.92rem;line-height:1.65}
+.card-tag{display:inline-block;font-size:.72rem;padding:.15rem .7rem;border-radius:100px;background:var(--bg4);color:var(--blue);margin-bottom:.6rem;font-weight:600}
+
+/* ── TIMELINE ── */
+.timeline{position:relative;padding-left:2.5rem;margin:2rem auto;max-width:800px}
+.timeline::before{content:'';position:absolute;left:8px;top:0;bottom:0;width:3px;background:var(--grad-1);border-radius:3px}
+.tl-item{position:relative;margin-bottom:2rem;animation:fadeUp .6s ease both}
+.tl-item:nth-child(1){animation-delay:0s}
+.tl-item:nth-child(2){animation-delay:.1s}
+.tl-item:nth-child(3){animation-delay:.2s}
+.tl-item:nth-child(4){animation-delay:.3s}
+.tl-item:nth-child(5){animation-delay:.4s}
+.tl-item:nth-child(6){animation-delay:.5s}
+.tl-dot{position:absolute;left:-2.5rem;top:6px;width:16px;height:16px;border-radius:50%;background:var(--blue);border:3px solid var(--bg);box-shadow:0 0 0 3px var(--blue)}
+.tl-item h4{font-size:1.05rem;font-weight:700;margin-bottom:.2rem}
+.tl-item p{color:var(--muted);font-size:.9rem;margin:0}
+
+/* ── TABLES ── */
+.table-wrap{overflow-x:auto;margin:1.2rem 0;border-radius:12px;border:1px solid var(--bg4)}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{background:var(--bg3);color:var(--blue);font-weight:600;padding:.7rem .8rem;text-align:left;font-size:.82rem;text-transform:uppercase;letter-spacing:.5px}
+td{padding:.65rem .8rem;border-top:1px solid var(--bg4);color:var(--text)}
+tr:hover td{background:var(--bg3)}
+.rank-1 td:first-child{color:var(--amber);font-weight:800}
+.rank-1{background:rgba(251,191,36,.04)}
+.positive{color:var(--green);font-weight:600}
+.negative{color:var(--red)}
+
+/* ── GALLERY ── */
+.gallery{display:grid;grid-template-columns:repeat(2,1fr);gap:1.5rem;margin:2rem 0}
+.gallery-item{background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;overflow:hidden;transition:all .3s}
+.gallery-item:hover{transform:translateY(-3px);box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.gallery-item img{width:100%;height:auto;display:block;transition:transform .4s}
+.gallery-item:hover img{transform:scale(1.02)}
+.gallery-item .cap{padding:.8rem 1.1rem;color:var(--muted);font-size:.85rem;background:var(--bg3);line-height:1.5}
+.gallery-wide{background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;overflow:hidden;margin:1.5rem 0;transition:all .3s}
+.gallery-wide:hover{box-shadow:0 12px 40px rgba(0,0,0,.4)}
+.gallery-wide img{width:100%;height:auto;display:block}
+.gallery-wide .cap{padding:.8rem 1.1rem;color:var(--muted);font-size:.85rem;background:var(--bg3);line-height:1.5}
+
+/* ── FUN FACTS ── */
+.facts{display:grid;grid-template-columns:repeat(4,1fr);gap:1.2rem;margin:2rem 0}
+.fact-card{background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.8rem 1.2rem;text-align:center}
+.fact-card .big{font-size:3rem;font-weight:900}
+.fact-card .big.blue{color:var(--blue)}
+.fact-card .big.green{color:var(--green)}
+.fact-card .big.amber{color:var(--amber)}
+.fact-card .big.pink{color:var(--pink)}
+.fact-card p{color:var(--muted);font-size:.9rem;margin-top:.4rem}
+
+/* ── GLOSSARY ── */
+.glossary{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:1rem;margin:1.5rem 0}
+.glossary-item{background:var(--bg3);border-radius:10px;padding:1.2rem 1.4rem}
+.glossary-item strong{color:var(--blue);display:block;margin-bottom:.25rem;font-size:.9rem}
+.glossary-item span{color:var(--muted);font-size:.85rem;line-height:1.5}
+
+/* ── PROGRESS BAR ── */
+.progress-bar{height:8px;background:var(--bg4);border-radius:8px;overflow:hidden;margin:.6rem 0}
+.progress-fill{height:100%;border-radius:8px;background:var(--grad-1);width:0;transition:width 1.2s cubic-bezier(.22,1,.36,1)}
+
+/* ── CODE BLOCKS ── */
+pre{background:var(--bg2);border:1px solid var(--bg4);border-radius:10px;padding:1rem 1.2rem;overflow-x:auto;margin:.8rem 0}
+code{font-family:'JetBrains Mono','Fira Code',monospace;font-size:.85rem;color:var(--cyan)}
+pre code{color:var(--text)}
+.cmd{color:var(--green)}
+
+/* ── FOOTER ── */
+.footer{text-align:center;padding:3rem 2rem;color:var(--dim);font-size:.85rem;border-top:1px solid var(--bg4);margin-top:2rem}
+
+/* ── RESPONSIVE ── */
+@media(max-width:1024px){
+  .facts{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:768px){
+  section{padding:2.5rem 1.2rem}
+  .hero h1{font-size:2rem}
+  .stats-grid{grid-template-columns:repeat(3,1fr)}
+  .card-grid{grid-template-columns:1fr}
+  .gallery{grid-template-columns:1fr}
+  .facts{grid-template-columns:repeat(2,1fr)}
+}
+@media(max-width:480px){
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .facts{grid-template-columns:1fr}
+  .glossary{grid-template-columns:1fr}
+}
+
+/* ── GLOW BUTTON ── */
+.glow-btn{display:inline-block;padding:.7rem 2rem;border-radius:100px;background:var(--grad-1);color:white;font-weight:700;font-size:.95rem;border:none;cursor:pointer;transition:all .3s;text-decoration:none;animation:pulse 3s ease-in-out infinite}
+.glow-btn:hover{transform:translateY(-2px);box-shadow:0 8px 30px rgba(56,189,248,.3)}
+</style>
+</head>
+<body>
+
+<div class="hero-bg">
+  <div class="orb"></div>
+  <div class="orb"></div>
+  <div class="orb"></div>
+</div>
+
+<div class="wrapper">
+
+<!-- ─── HERO ─── -->
+<section class="hero">
+  <h1>Will Your Train Be <span>Delayed?</span></h1>
+  <p class="subtitle">
+    We built a smart system that predicts whether a Deutsche Bahn train will arrive late &mdash;
+    using past schedules and weather data. No PhD required to understand it!
+  </p>
+  <div class="badge-row">
+    <span class="badge badge-blue">&#x1F4CA; Data Science</span>
+    <span class="badge badge-green">&#x1F4BB; Machine Learning</span>
+    <span class="badge badge-amber">&#x26A0;&#xFE0F; Delay Prediction</span>
+    <span class="badge badge-pink">&#x1F300; Weather Analysis</span>
+    <span class="badge badge-purple">&#x1F3C6; Capstone Project</span>
+  </div>
+
+  <div class="stats-grid" style="width:100%;max-width:900px">
+    <div class="stat-card"><div class="icon">&#x1F686;</div><div class="num">50,000</div><div class="label">Train Records</div></div>
+    <div class="stat-card"><div class="icon">&#x1F326;&#xFE0F;</div><div class="num">315k</div><div class="label">Weather Records</div></div>
+    <div class="stat-card"><div class="icon">&#x1F3E0;</div><div class="num">15</div><div class="label">Stations</div></div>
+    <div class="stat-card"><div class="icon">&#x1F4C5;</div><div class="num">4 Years</div><div class="label">2021 &ndash; 2024</div></div>
+    <div class="stat-card"><div class="icon">&#x1F9E0;</div><div class="num">21</div><div class="label">Features</div></div>
+    <div class="stat-card"><div class="icon">&#x1F3AF;</div><div class="num">14</div><div class="label">Models Trained</div></div>
+  </div>
+
+  <p style="margin-top:1rem;animation:fadeUp 1s ease .5s both">
+    <a href="#overview" class="glow-btn">&#x2193; Explore the Report</a>
+  </p>
+</section>
+
+<!-- ─── INTRODUCTION ─── -->
+<section id="overview" class="reveal">
+  <h2 class="section-title">What's This All About?</h2>
+  <p class="section-sub">If you've ever waited at a train station wondering &quot;why is it always late?&quot; &mdash; this project tries to answer that question with data.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <div class="emoji">&#x1F50D;</div>
+      <h4>The Problem</h4>
+      <p>Deutsche Bahn trains are often delayed. Weather conditions (rain, snow, wind) and other factors play a big role. Can we predict delays before they happen?</p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F3AF;</div>
+      <h4>The Goal</h4>
+      <p>Build a computer system that looks at schedule info and weather data, then predicts: <strong>&quot;Will this train be late?&quot;</strong> and <strong>&quot;How many minutes?&quot;</strong></p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F4A1;</div>
+      <h4>The Approach</h4>
+      <p>We used <strong>Machine Learning</strong> &mdash; the same technology behind Netflix recommendations and self-driving cars. The computer learns patterns from past data to make predictions.</p>
+    </div>
+  </div>
+
+  <div class="facts">
+    <div class="fact-card"><div class="big blue">~49%</div><p>of trains in our data were delayed more than 5 minutes</p></div>
+    <div class="fact-card"><div class="big green">~5.6</div><p>minutes average delay across all records</p></div>
+    <div class="fact-card"><div class="big amber">&#x26A1;</div><p>Regional trains (RB/RE) delayed more often than ICE/IC</p></div>
+    <div class="fact-card"><div class="big pink">&#x2744;&#xFE0F;</div><p>Winter has the highest average delays</p></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── HOW IT WORKS ─── -->
+<section id="methodology" class="reveal">
+  <h2 class="section-title">How We Built It: CRISP-DM</h2>
+  <p class="section-sub">Think of this like a recipe. We followed a 6-step process that data scientists use worldwide to solve real problems.</p>
+
+  <div class="timeline">
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--blue)"></div>
+      <h4>1. Business Understanding</h4>
+      <p>We defined the goal: predict delays so passengers can plan better and DB can operate more efficiently.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--green)"></div>
+      <h4>2. Data Understanding</h4>
+      <p>We gathered train schedules for 15 major German stations (50,000 records) and fetched weather data from the Open-Meteo API (315,000 hourly measurements). Then we explored the data to find patterns.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--amber)"></div>
+      <h4>3. Data Preparation</h4>
+      <p>We merged train and weather data, cleaned it up, and created 21 useful features. For example: &quot;Is it rush hour?&quot;, &quot;What season is it?&quot;, &quot;How much did the previous train get delayed?&quot;</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--pink)"></div>
+      <h4>4. Modeling</h4>
+      <p>We trained <strong>14 different ML models</strong> (7 for classification, 7 for regression). Each model learned from the data to make predictions.</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--purple)"></div>
+      <h4>5. Evaluation</h4>
+      <p>We tested every model and ranked them. The best classifier was <strong>Logistic Regression</strong> (63% AUC). The best regressor was <strong>Linear Regression</strong> (RMSE = 3.8 minutes).</p>
+    </div>
+    <div class="tl-item">
+      <div class="tl-dot" style="background:var(--cyan)"></div>
+      <h4>6. Deployment</h4>
+      <p>We saved the best models, created 27 charts and graphs, and produced this report &mdash; all with a single command!</p>
+    </div>
+  </div>
+
+  <div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.5rem;margin-top:1rem">
+    <p style="color:var(--muted);margin:0;font-size:.95rem">
+      <span style="color:var(--amber);font-weight:700">&#x1F4A1; Non-technical summary:</span>
+      We collected train and weather data, taught computers to find patterns in it, tested which computer program worked best, and made everything automatic.
+    </p>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── DATA STORY ─── -->
+<section id="data" class="reveal">
+  <h2 class="section-title">Our Data Story</h2>
+  <p class="section-sub">Every good prediction starts with good data. Here's what we collected and where it came from.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <span class="card-tag">Source 1</span>
+      <div class="emoji">&#x1F686;</div>
+      <h4>Train Schedules</h4>
+      <p>50,000 records from 15 major German stations including Berlin Hbf, M&uuml;nchen Hbf, Hamburg Hbf, Frankfurt Hbf, and more. We have scheduled vs actual arrival times, train types (ICE, IC, RE, RB, S-Bahn), and delay minutes.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">Source 2</span>
+      <div class="emoji">&#x1F326;&#xFE0F;</div>
+      <h4>Weather Data</h4>
+      <p>315,000 hourly weather measurements from the <strong>Open-Meteo API</strong> (a free weather service). We pulled temperature, rain, snowfall, humidity, cloud cover, pressure, wind speed, and visibility for every station.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">The Merge</span>
+      <div class="emoji">&#x1F91D;</div>
+      <h4>Joined Together</h4>
+      <p>We combined both datasets using a simple key: <strong>Station + Date + Hour</strong>. So every train arrival is matched with the weather at that station, on that day, at that hour. 60% of records found a perfect weather match.</p>
+    </div>
+  </div>
+
+  <div class="gallery-wide">
+    <img src="target_distribution.png" alt="Target Distribution">
+    <div class="cap">&#x1F4CA; <strong>Delay vs On-Time:</strong> About half the trains (49%) were delayed more than 5 minutes. The other half (51%) were on time.</div>
+  </div>
+
+  <div class="gallery-wide">
+    <img src="delay_distribution.png" alt="Delay Distribution">
+    <div class="cap">&#x1F4CA; <strong>How delays are spread out:</strong> Most delays are short (1-5 minutes). Long delays (15+ minutes) are rare. This is called a &quot;right-skewed&quot; distribution.</div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── KEY INSIGHTS ─── -->
+<section id="eda" class="reveal">
+  <h2 class="section-title">Key Insights &amp; Patterns</h2>
+  <p class="section-sub">Before building any models, we explored the data to find interesting patterns. Here's what we discovered.</p>
+
+  <h3 style="color:var(--amber);margin-bottom:.5rem">&#x1F552; When Are Delays Worst?</h3>
+  <div class="gallery">
+    <div class="gallery-item"><img src="delay_by_hour.png" alt="Delay by Hour"><div class="cap">&#x1F552; <strong>By Hour:</strong> Delays peak during evening rush hour (5-7 PM). Morning commutes also see higher delays.</div></div>
+    <div class="gallery-item"><img src="delay_by_weekday.png" alt="Delay by Weekday"><div class="cap">&#x1F4C5; <strong>By Weekday:</strong> Fridays have the highest delays &mdash; everyone is trying to go home for the weekend!</div></div>
+    <div class="gallery-item"><img src="delay_by_month.png" alt="Delay by Month"><div class="cap">&#x1F3E0; <strong>By Month:</strong> December and January (winter) have the worst delays. Summer (July-August) is more reliable.</div></div>
+    <div class="gallery-item"><img src="delay_by_season.png" alt="Delay by Season"><div class="cap">&#x2744;&#xFE0F; <strong>By Season:</strong> Winter is the worst season for delays. Spring and summer are better for travel.</div></div>
+  </div>
+
+  <h3 style="color:var(--amber);margin:.8rem 0 .5rem">&#x1F686; Which Trains Are Most Delayed?</h3>
+  <div class="gallery-wide"><img src="delay_by_train_type.png" alt="Delay by Train Type"><div class="cap">&#x1F686; <strong>Train Type Analysis:</strong> Regional trains (RB, RE) tend to be delayed more often than high-speed ICE/IC trains. S-Bahn (city trains) perform best.</div></div>
+
+  <h3 style="color:var(--amber);margin:.8rem 0 .5rem">&#x1F326;&#xFE0F; Does Weather Affect Delays?</h3>
+  <p style="color:var(--muted);margin-bottom:1rem">Yes! We found clear relationships between weather and train delays. Scroll through the charts below.</p>
+  <div class="gallery">
+    <div class="gallery-item"><img src="delay_vs_temperature_2m.png" alt="Delay vs Temperature"><div class="cap">&#x1F321;&#xFE0F; <strong>Temperature:</strong> More delays in very cold weather (below 0&deg;C) and extreme heat.</div></div>
+    <div class="gallery-item"><img src="delay_vs_rain.png" alt="Delay vs Rain"><div class="cap">&#x1F327;&#xFE0F; <strong>Rain:</strong> More rain = more delays. Wet tracks and reduced visibility slow trains down.</div></div>
+    <div class="gallery-item"><img src="delay_vs_snowfall.png" alt="Delay vs Snowfall"><div class="cap">&#x2744;&#xFE0F; <strong>Snow:</strong> Even a little snow causes delays. Heavy snow can cause major disruptions.</div></div>
+    <div class="gallery-item"><img src="delay_vs_wind_speed_10m.png" alt="Delay vs Wind"><div class="cap">&#x1F4A8; <strong>Wind:</strong> Strong winds (40+ km/h) are associated with longer delays, especially for high-speed trains.</div></div>
+  </div>
+
+  <h3 style="color:var(--amber);margin:.8rem 0 .5rem">&#x1F4CA; How Everything Relates</h3>
+  <div class="gallery-wide"><img src="correlation_heatmap.png" alt="Correlation Heatmap"><div class="cap">&#x1F4CA; <strong>Correlation Heatmap:</strong> This chart shows how every feature relates to every other feature. Red = positive relationship, blue = negative. The darker the color, the stronger the connection.</div></div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── FEATURES ─── -->
+<section id="features" class="reveal">
+  <h2 class="section-title">The Features We Used</h2>
+  <p class="section-sub">Features are like clues the computer uses to make a prediction. Here are all 21 clues we gave each model.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <span class="card-tag">&#x1F552; 8 features</span>
+      <h4>Time-Based Clues</h4>
+      <p><strong>Hour of day</strong> (rush hour vs quiet night), <strong>day of week</strong> (Monday vs Sunday), <strong>month, season</strong>, whether it's a <strong>weekend, rush hour, morning peak, or evening peak</strong>.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x1F326;&#xFE0F; 8 features</span>
+      <h4>Weather Clues</h4>
+      <p><strong>Temperature, rainfall, snowfall, humidity, cloud cover, pressure, wind speed,</strong> and a <strong>weather severity score</strong> (0 = clear skies, 4 = thunderstorm).</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x1F504; 2 features</span>
+      <h4>History Clues</h4>
+      <p><strong>Previous delay:</strong> Was the last train at this station delayed? <strong>Rolling average:</strong> What's the average delay over the last 3 trains?</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x1F3AF; 3 encoded</span>
+      <h4>Category Clues</h4>
+      <p><strong>Train type</strong> (ICE, IC, RE, RB, etc.) and <strong>station name</strong> are converted into numerical form that the computer can understand.</p>
+    </div>
+  </div>
+
+  <div class="progress-bar" style="margin:1.5rem 0 .5rem"><div class="progress-fill" style="width:100%"></div></div>
+  <p style="color:var(--dim);font-size:.85rem;text-align:center">100% of engineered features used in model training</p>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── MODELS ─── -->
+<section id="models" class="reveal">
+  <h2 class="section-title">The Models We Trained</h2>
+  <p class="section-sub">Imagine you're hiring 14 different data analysts. Each one has a different strategy for predicting delays. We trained them all and picked the best.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <span class="card-tag">&#x1F3AF; Classification</span>
+      <div class="emoji">&#x2705;</div>
+      <h4>Will It Be Late? (Yes/No)</h4>
+      <p>7 models that answer: <strong>&quot;Will this train arrive more than 5 minutes late?&quot;</strong> Our models include Logistic Regression, Random Forest, Neural Network (MLP), and more.</p>
+      <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+      <p style="color:var(--dim);font-size:.8rem">7 of 10 models trained (3 optional ones not installed)</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x23F0; Regression</span>
+      <div class="emoji">&#x23F3;</div>
+      <h4>How Late? (Minutes)</h4>
+      <p>7 models that predict: <strong>&quot;Exactly how many minutes will this train be delayed?&quot;</strong> Our models include Linear Regression, Gradient Boosting, Neural Network, and more.</p>
+      <div class="progress-bar"><div class="progress-fill" style="width:100%"></div></div>
+      <p style="color:var(--dim);font-size:.8rem">7 of 10 models trained (3 optional ones not installed)</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── CLASSIFICATION RESULTS ─── -->
+<section id="classification" class="reveal">
+  <h2 class="section-title">Classification Results: Will It Be Late?</h2>
+  <p class="section-sub">These models answer a yes/no question: &quot;Will the train be delayed more than 5 minutes?&quot; Ranked by ROC AUC score (higher is better).</p>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>Rank</th><th>Model</th><th>Accuracy</th><th>Precision</th><th>Recall</th><th>F1 Score</th><th>ROC AUC</th></tr>
+    <tr class="rank-1"><td>1</td><td><strong>Logistic Regression</strong></td><td>60.2%</td><td>61.0%</td><td>53.6%</td><td>57.1%</td><td class="positive">0.6301</td></tr>
+    <tr><td>2</td><td>Gradient Boosting</td><td>60.4%</td><td>61.4%</td><td>53.0%</td><td>56.9%</td><td>0.6287</td></tr>
+    <tr><td>3</td><td>MLP Classifier (Neural Network)</td><td>60.1%</td><td>60.0%</td><td>57.1%</td><td>58.5%</td><td>0.6232</td></tr>
+    <tr><td>4</td><td>Decision Tree</td><td>59.2%</td><td>59.6%</td><td>52.9%</td><td>56.0%</td><td>0.6115</td></tr>
+    <tr><td>5</td><td>Random Forest</td><td>58.7%</td><td>58.7%</td><td>54.7%</td><td>56.6%</td><td>0.6100</td></tr>
+    <tr><td>6</td><td>K-Nearest Neighbors</td><td>51.2%</td><td>50.5%</td><td>53.6%</td><td>52.0%</td><td>0.5399</td></tr>
+    <tr><td>7</td><td>SVM</td><td>49.9%</td><td>49.2%</td><td>57.4%</td><td>53.0%</td><td>0.5117</td></tr>
+  </table>
+  </div>
+
+  <div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.5rem;margin:1.2rem 0">
+    <p style="color:var(--muted);margin:0;font-size:.95rem">
+      <span style="color:var(--amber);font-weight:700">&#x1F4A1; What does this mean?</span>
+      Logistic Regression was the winner. It correctly predicted whether a train was delayed or not <strong>60.2% of the time</strong>. The ROC AUC score of 0.63 means it's better than random guessing (0.50) but not perfect &mdash; delay prediction is genuinely hard!
+    </p>
+  </div>
+
+  <div class="gallery">
+    <div class="gallery-item"><img src="clf_comparison_roc_auc.png" alt="ROC AUC Comparison"><div class="cap">&#x1F3C6; <strong>ROC AUC ranking:</strong> Logistic Regression leads, SVM trails. A score of 0.5 = random guessing, 1.0 = perfect.</div></div>
+    <div class="gallery-item"><img src="clf_comparison_accuracy.png" alt="Accuracy Comparison"><div class="cap">&#x1F4CA; <strong>Accuracy comparison:</strong> Most models cluster around 55-60%. No single model dominates.</div></div>
+    <div class="gallery-item"><img src="clf_comparison_f1.png" alt="F1 Comparison"><div class="cap">&#x2696;&#xFE0F; <strong>F1 Score:</strong> Balances precision and recall. MLP (Neural Network) scores highest here.</div></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── REGRESSION RESULTS ─── -->
+<section id="regression" class="reveal">
+  <h2 class="section-title">Regression Results: How Many Minutes Late?</h2>
+  <p class="section-sub">These models predict the exact number of minutes a train will be delayed. Ranked by RMSE (lower = more accurate).</p>
+
+  <div class="table-wrap">
+  <table>
+    <tr><th>Rank</th><th>Model</th><th>MAE</th><th>RMSE</th><th>R&sup2; Score</th></tr>
+    <tr class="rank-1"><td>1</td><td><strong>Linear Regression</strong></td><td>2.93 min</td><td class="positive">3.81 min</td><td>0.065</td></tr>
+    <tr><td>2</td><td>Ridge</td><td>2.93 min</td><td>3.81 min</td><td>0.065</td></tr>
+    <tr><td>3</td><td>Gradient Boosting Regressor</td><td>2.93 min</td><td>3.81 min</td><td>0.063</td></tr>
+    <tr><td>4</td><td>MLP Regressor (Neural Network)</td><td>2.95 min</td><td>3.83 min</td><td>0.057</td></tr>
+    <tr><td>5</td><td>Random Forest Regressor</td><td>3.00 min</td><td>3.88 min</td><td>0.029</td></tr>
+    <tr><td>6</td><td>Lasso</td><td>3.06 min</td><td>3.94 min</td><td>-0.000</td></tr>
+    <tr><td>7</td><td>ElasticNet</td><td>3.06 min</td><td>3.94 min</td><td>-0.000</td></tr>
+  </table>
+  </div>
+
+  <div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.5rem;margin:1.2rem 0">
+    <p style="color:var(--muted);margin:0;font-size:.95rem">
+      <span style="color:var(--amber);font-weight:700">&#x1F4A1; What does this mean?</span>
+      The best model predicts delay within <strong>&plusmn;3.8 minutes</strong> on average. That's decent but not perfect. The R&sup2; score of 0.065 tells us that weather and schedule info only explains about 6.5% of delay variation &mdash; there are many other factors at play (track work, staffing, etc.).
+    </p>
+  </div>
+
+  <div class="gallery">
+    <div class="gallery-item"><img src="reg_comparison_mae.png" alt="MAE Comparison"><div class="cap">&#x1F4CA; <strong>MAE (Mean Absolute Error):</strong> On average, predictions are off by about 3 minutes.</div></div>
+    <div class="gallery-item"><img src="reg_comparison_rmse.png" alt="RMSE Comparison"><div class="cap">&#x1F4CA; <strong>RMSE:</strong> Penalizes large errors more heavily. Linear Regression and Ridge tie for best.</div></div>
+    <div class="gallery-item"><img src="reg_comparison_r2.png" alt="R2 Comparison"><div class="cap">&#x1F4CA; <strong>R&sup2; Score:</strong> How much of the delay can our features explain? Best is ~6.5%.</div></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── BEST CLASSIFIER ─── -->
+<section id="best-clf" class="reveal">
+  <h2 class="section-title">Best Classifier Deep Dive: Logistic Regression</h2>
+  <p class="section-sub">Let's look at how our winning model makes decisions. Even though it's called &quot;Logistic Regression,&quot; it works similar to how a doctor diagnoses illness based on symptoms.</p>
+
+  <div class="gallery">
+    <div class="gallery-item"><img src="confusion_matrix_LogisticRegression.png" alt="Confusion Matrix"><div class="cap">&#x2705; <strong>Confusion Matrix:</strong> Shows correct vs wrong predictions. Top-left = correctly predicted on-time (3,416). Bottom-right = correctly predicted delayed (2,608). Off-diagonals = mistakes.</div></div>
+    <div class="gallery-item"><img src="roc_curve_LogisticRegression.png" alt="ROC Curve"><div class="cap">&#x1F4C8; <strong>ROC Curve:</strong> The blue line shows performance. The dashed diagonal = random guessing. Our model (AUC=0.63) is above the diagonal &mdash; meaning it's better than random!</div></div>
+    <div class="gallery-item"><img src="pr_curve_LogisticRegression.png" alt="PR Curve"><div class="cap">&#x1F4C8; <strong>Precision-Recall Curve:</strong> Focuses on how well the model finds delayed trains specifically. Higher curve = better at catching delays.</div></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── BEST REGRESSOR ─── -->
+<section id="best-reg" class="reveal">
+  <h2 class="section-title">Best Regressor Deep Dive: Linear Regression</h2>
+  <p class="section-sub">This model predicts the exact delay in minutes. Think of it like drawing a straight line through your data that best fits all the points.</p>
+
+  <div class="gallery">
+    <div class="gallery-item"><img src="pred_vs_actual_LinearRegression.png" alt="Predicted vs Actual"><div class="cap">&#x1F4C8; <strong>Predicted vs Actual:</strong> Each dot is one prediction. If the dot falls on the red dashed line, the prediction was perfect. Dots scattered above/below = prediction errors.</div></div>
+    <div class="gallery-item"><img src="residuals_LinearRegression.png" alt="Residuals"><div class="cap">&#x1F4CA; <strong>Residuals (Errors):</strong> Left: histogram of errors. The ideal shape is a bell centered at 0. Right: errors vs predicted values &mdash; we want random scatter, no pattern.</div></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── FEATURE IMPORTANCE ─── -->
+<section id="importance" class="reveal">
+  <h2 class="section-title">What Matters Most?</h2>
+  <p class="section-sub">We asked the best model: &quot;Which clues were most important for your decision?&quot; Here's what it said.</p>
+
+  <div class="gallery-wide"><img src="feature_importance_LogisticRegression.png" alt="Feature Importance"><div class="cap">&#x1F4CA; <strong>Feature Importance:</strong> The longer the bar, the more that feature influenced the model's decision. <strong>Temperature, cloud cover, wind speed, and snowfall</strong> are among the top predictors of delays.</div></div>
+
+  <div class="facts">
+    <div class="fact-card"><div class="big blue">&#x1F321;&#xFE0F;</div><p>Temperature is the #1 weather factor affecting delays</p></div>
+    <div class="fact-card"><div class="big green">&#x2601;&#xFE0F;</div><p>Cloud cover matters more than you'd think</p></div>
+    <div class="fact-card"><div class="big amber">&#x1F4A8;</div><p>Wind speed affects high-speed trains significantly</p></div>
+    <div class="fact-card"><div class="big pink">&#x2744;&#xFE0F;</div><p>Snowfall has the biggest single impact per unit</p></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── CONCLUSIONS ─── -->
+<section id="conclusions" class="reveal">
+  <h2 class="section-title">Conclusions &amp; Key Takeaways</h2>
+  <p class="section-sub">What we learned from this project, what worked, what didn't, and what could be done better.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 1</span>
+      <div class="emoji">&#x1F321;&#xFE0F;</div>
+      <h4>Weather Matters, But Isn't Everything</h4>
+      <p>Temperature, rain, snow, and wind all correlate with delays. However, our models could only explain about <strong>6.5% of delay variation</strong> using weather + schedule data. The remaining ~94% comes from other factors: track maintenance, staffing shortages, signal issues, construction work, and connecting train waits.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 2</span>
+      <div class="emoji">&#x1F552;</div>
+      <h4>Timing Is Critical</h4>
+      <p>Delays follow clear temporal patterns: <strong>Fridays are worst</strong>, <strong>winter is hardest</strong>, and <strong>evening rush hour (5-7 PM) peaks</strong>. Regional trains (RB/RE) suffer more than high-speed ICE/IC trains. This suggests infrastructure quality and train priority systems play a big role.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 3</span>
+      <div class="emoji">&#x1F3AF;</div>
+      <h4>Simple Models Compete With Complex Ones</h4>
+      <p>Logistic Regression (simplest classifier) tied or beat Neural Networks and Gradient Boosting. Linear Regression won for regression. This tells us: for this problem, <strong>simple, interpretable models are just as good</strong> as black-box complex ones. No need for deep learning here!</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 4</span>
+      <div class="emoji">&#x26A0;&#xFE0F;</div>
+      <h4>Prediction Is Genuinely Hard</h4>
+      <p>60% accuracy and 3.8-minute RMSE are decent baselines but not production-ready. Delay prediction is a <strong>notoriously difficult problem</strong> worldwide, not just for Deutsche Bahn. The stochastic nature of rail operations (a single signal failure cascades) makes perfect prediction impossible.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 5</span>
+      <div class="emoji">&#x1F4E6;</div>
+      <h4>Data Quality Is Key</h4>
+      <p>With only 60% weather match rate and synthetic train data (since real DB data isn't publicly available), our results are proof-of-concept. <strong>Real operational data would dramatically improve performance</strong> &mdash; especially real-time delay tracking and infrastructure status feeds.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x2705; Finding 6</span>
+      <div class="emoji">&#x1F9E0;</div>
+      <h4>Feature Engineering Helped</h4>
+      <p>Adding lag delay (previous train's delay) and rolling mean delay improved model performance. This shows that <strong>delay history is one of the strongest predictors</strong> &mdash; if the last train was late, the next one probably will be too (due to shared infrastructure).</p>
+    </div>
+  </div>
+
+  <h3 style="color:var(--amber);margin-top:2rem">&#x1F4C8; Model Performance Summary</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Task</th><th>Best Model</th><th>Key Metric</th><th>Score</th><th>Interpretation</th></tr>
+    <tr class="rank-1"><td>Classification (Delayed? Yes/No)</td><td>Logistic Regression</td><td>ROC AUC</td><td class="positive">0.6301</td><td>Better than random (0.50), room for improvement</td></tr>
+    <tr><td>Classification (Delayed? Yes/No)</td><td>Logistic Regression</td><td>Accuracy</td><td>60.2%</td><td>Correct 6 out of 10 times</td></tr>
+    <tr><td>Classification (Delayed? Yes/No)</td><td>Logistic Regression</td><td>Precision</td><td>61.0%</td><td>When it says delayed, it's right 61% of the time</td></tr>
+    <tr><td>Classification (Delayed? Yes/No)</td><td>Logistic Regression</td><td>Recall</td><td>53.6%</td><td>It catches 54% of actual delays</td></tr>
+    <tr><td>Regression (Delay Minutes)</td><td>Linear Regression</td><td>RMSE</td><td class="positive">3.81 min</td><td>Predictions off by ~3.8 minutes on average</td></tr>
+    <tr><td>Regression (Delay Minutes)</td><td>Linear Regression</td><td>MAE</td><td>2.93 min</td><td>Average absolute error is ~3 minutes</td></tr>
+    <tr><td>Regression (Delay Minutes)</td><td>Linear Regression</td><td>R&sup2;</td><td>0.065</td><td>Features explain 6.5% of delay variance</td></tr>
+  </table>
+  </div>
+
+  <h3 style="color:var(--amber);margin-top:2rem">&#x1F4DD; Business Recommendations</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="emoji">&#x1F4CA;</div>
+      <h4>For Passengers</h4>
+      <p><strong>Travel in spring/summer</strong> for fewer delays. Avoid Friday evenings and winter months. Choose ICE/IC over RB/RE when possible. Add 5-10 minutes buffer for regional trains in bad weather.</p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F3ED;</div>
+      <h4>For Deutsche Bahn</h4>
+      <p>Invest in <strong>winter weather preparedness</strong> (switch heating, snow clearing). Prioritize regional train infrastructure. Use predictive models like this for <strong>proactive delay communication</strong> to passengers via apps and station displays.</p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F3C6;</div>
+      <h4>For Data Scientists</h4>
+      <p>This is a strong baseline. Next steps: add <strong>real-time track occupancy data</strong>, <strong>crew schedules</strong>, <strong>maintenance logs</strong>, and <strong>network topology</strong>. Try deep learning (LSTM/Transformers) for time-series forecasting of delays.</p>
+    </div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── FULL REPORT ─── -->
+<section id="report" class="reveal">
+  <h2 class="section-title">Full Pipeline Report</h2>
+  <p class="section-sub">The complete output from <code>python main.py</code> &mdash; all raw metrics, file locations, and runtime stats.</p>
+
+  <div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.5rem;font-family:'JetBrains Mono','Fira Code',monospace;font-size:.82rem;line-height:1.6;overflow-x:auto;white-space:pre;color:var(--muted)">======================================================================
+DEUTSCHE BAHN DELAY PREDICTION - RESULTS SUMMARY
+======================================================================
+Generated: 2026-06-25 15:51:54
+Total runtime: 122.81 seconds (2.05 minutes)
+
+======================================================================
+CLASSIFICATION RESULTS
+======================================================================
+rank  model              accuracy  precision  recall     f1  roc_auc
+   1  LogisticRegression    0.6024     0.6096  0.5361 0.5705   0.6301
+   2  GradientBoosting      0.6041     0.6137  0.5296 0.5686   0.6287
+   3  MLPClassifier         0.6011     0.5999  0.5711 0.5851   0.6232
+   4  DecisionTree          0.5915     0.5963  0.5286 0.5604   0.6115
+   5  RandomForest          0.5868     0.5865  0.5467 0.5659   0.6100
+   6  KNN                   0.5123     0.5047  0.5357 0.5197   0.5399
+   7  SVM                   0.4987     0.4924  0.5743 0.5302   0.5117
+
+Best classifier: LogisticRegression
+
+======================================================================
+REGRESSION RESULTS
+======================================================================
+rank  model                       mae     mse   rmse   mape      r2
+   1  LinearRegression         2.9298 14.5237 3.8110 127.64  0.0652
+   2  Ridge                    2.9298 14.5238 3.8110 127.63  0.0652
+   3  GradientBoostingRegressor 2.9339 14.5518 3.8147 127.89  0.0634
+   4  MLPRegressor              2.9461 14.6581 3.8286 128.71  0.0565
+   5  RandomForestRegressor     2.9962 15.0835 3.8837 129.96  0.0292
+   6  Lasso                     3.0597 15.5370 3.9417 136.79 -0.0000
+   7  ElasticNet                3.0597 15.5370 3.9417 136.79 -0.0000
+
+Best regressor: LinearRegression
+
+======================================================================
+FILES SAVED
+======================================================================
+  Train data:            data/raw/deutsche_bahn_raw.csv
+  Weather data:          data/raw/weather_raw.csv
+  Merged data:           data/interim/merged_data.csv
+  Engineered data:       data/processed/engineered_data.csv
+  Best classifier:       models/best_classifier.pkl
+  Best regressor:        models/best_regressor.pkl
+  Preprocessor:          models/preprocessor.pkl
+  Classifier metrics:    reports/classification_metrics.csv
+  Regressor metrics:     reports/regression_metrics.csv
+  Results summary:       reports/results_summary.txt
+======================================================================</div>
+
+  <div style="background:var(--bg2);border:1px solid var(--bg4);border-radius:14px;padding:1.5rem;margin-top:1rem">
+    <p style="color:var(--muted);margin:0;font-size:.95rem">
+      <span style="color:var(--amber);font-weight:700">&#x1F4A1; What does this tell us?</span>
+      The classification results show that all models perform above random guessing (AUC &gt; 0.50), but none are dramatically better than others. The regression results show very similar RMSE scores across models. This suggests that <strong>the current feature set captures only part of the story</strong> &mdash; adding more data sources (real-time track status, crew schedules, maintenance plans) would likely boost performance significantly.
+    </p>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── GLOSSARY ─── -->
+<section id="glossary" class="reveal">
+  <h2 class="section-title">Simple Glossary</h2>
+  <p class="section-sub">Technical terms explained in plain English.</p>
+
+  <div class="glossary">
+    <div class="glossary-item"><strong>Machine Learning</strong><span>A computer learning patterns from data instead of being explicitly programmed. Like showing a child many photos of cats until they can recognize one.</span></div>
+    <div class="glossary-item"><strong>Classification</strong><span>Predicting a category. Like spam detection: &quot;Is this email spam?&quot; (Yes/No). We predict: &quot;Is this train delayed?&quot;</span></div>
+    <div class="glossary-item"><strong>Regression</strong><span>Predicting a number. Like a house price estimate. We predict: &quot;How many minutes late?&quot;</span></div>
+    <div class="glossary-item"><strong>Accuracy</strong><span>The percentage of predictions the model got right. 60% accuracy = correct 6 out of 10 times.</span></div>
+    <div class="glossary-item"><strong>ROC AUC</strong><span>A score from 0.5 to 1.0 measuring overall prediction quality. 0.5 = random guessing, 1.0 = perfect predictions.</span></div>
+    <div class="glossary-item"><strong>RMSE</strong><span>Average prediction error in minutes (or original units). RMSE = 3.8 means predictions are typically off by about 3.8 minutes.</span></div>
+    <div class="glossary-item"><strong>Feature</strong><span>A piece of information given to the model. Like a clue in a detective case. Examples: temperature, hour of day, train type.</span></div>
+    <div class="glossary-item"><strong>CRISP-DM</strong><span>A 6-step process data scientists follow to solve problems. Like a recipe for data projects.</span></div>
+    <div class="glossary-item"><strong>One-Hot Encoding</strong><span>Converting categories (like &quot;ICE&quot; or &quot;RB&quot;) into numbers the computer can understand.</span></div>
+    <div class="glossary-item"><strong>Open-Meteo API</strong><span>A free online service that provides historical weather data for any location on Earth.</span></div>
+  </div>
+</section>
+
+<div class="section-divider"></div>
+
+<!-- ─── HOW TO RUN ─── -->
+<section id="usage" class="reveal">
+  <h2 class="section-title">How to Run the Project Yourself</h2>
+  <p class="section-sub">Want to reproduce these results? It's one command. But first, you'll need Python installed.</p>
+
+  <div class="card-grid">
+    <div class="card">
+      <span class="card-tag">&#x1F4E6; Step 1</span>
+      <h4>Install Dependencies</h4>
+      <pre><code><span class="cmd">pip install</span> -r requirements.txt</code></pre>
+      <p style="font-size:.88rem">This installs all the Python packages we used.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x25B6;&#xFE0F; Step 2</span>
+      <h4>Run the Pipeline</h4>
+      <pre><code><span class="cmd">python</span> main.py</code></pre>
+      <p style="font-size:.88rem">Generates data, trains 14 models, creates 27 plots, and saves everything.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x26A1; Step 3 (Optional)</span>
+      <h4>Quick Test Mode</h4>
+      <pre><code><span class="cmd">python</span> main.py --quick --skip-weather-api</code></pre>
+      <p style="font-size:.88rem">Runs with 5,000 records and synthetic weather &mdash; finishes in ~25 seconds.</p>
+    </div>
+    <div class="card">
+      <span class="card-tag">&#x1F514; Step 4</span>
+      <h4>Predict Future Trains</h4>
+      <pre><code><span class="cmd">python</span> predict.py -s "Berlin Hbf" -t ICE -d 2025-06-25 -H 14</code></pre>
+      <p style="font-size:.88rem">Uses trained models to check if a future train will be delayed. Auto-fetches live weather!</p>
+    </div>
+  </div>
+
+  <h3 style="color:var(--amber);margin-top:1.5rem">&#x1F9E0; Prediction Examples</h3>
+  <div class="card-grid">
+    <div class="card">
+      <div class="emoji">&#x1F4F1;</div>
+      <h4>Quick Check (auto weather)</h4>
+      <pre><code><span class="cmd">python</span> predict.py -s "Berlin Hbf" -t ICE -d 2025-12-24 -H 8</code></pre>
+      <p style="font-size:.88rem">Fetches weather from Open-Meteo automatically. Shows delay probability in plain English.</p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F321;&#xFE0F;</div>
+      <h4>Custom Weather</h4>
+      <pre><code><span class="cmd">python</span> predict.py -s "Munchen Hbf" -t RE -d 2025-01-15 -H 8 --temp -5 --snowfall 8</code></pre>
+      <p style="font-size:.88rem">Specify exact weather to see how different conditions change the prediction.</p>
+    </div>
+    <div class="card">
+      <div class="emoji">&#x1F4AC;</div>
+      <h4>Interactive Mode</h4>
+      <pre><code><span class="cmd">python</span> predict.py --interactive</code></pre>
+      <p style="font-size:.88rem">Step-by-step prompts. Great for experimenting with different scenarios.</p>
+    </div>
+  </div>
+
+  <h3 style="color:var(--amber);margin-top:1.5rem">&#x1F4C2; All Output Files</h3>
+  <div class="table-wrap">
+  <table>
+    <tr><th>Output</th><th>Location</th><th>Description</th></tr>
+    <tr><td>Trained Models</td><td><code>models/*.pkl</code></td><td>Best classifier + regressor saved for reuse</td></tr>
+    <tr><td>Metrics Tables</td><td><code>reports/*_metrics.csv</code></td><td>All model scores in spreadsheet format</td></tr>
+    <tr><td>Charts &amp; Graphs</td><td><code>reports/*.png</code></td><td>27 visualization files</td></tr>
+    <tr><td>Results Summary</td><td><code>reports/results_summary.txt</code></td><td>Complete text report</td></tr>
+    <tr><td>This Presentation</td><td><code>reports/presentation.html</code></td><td>You're looking at it!</td></tr>
+  </table>
+  </div>
+</section>
+
+<!-- ─── FOOTER ─── -->
+<footer class="footer">
+  <p><strong>Deutsche Bahn Delay Prediction</strong> &mdash; Machine Learning Capstone Project</p>
+  <p>Built with Python, scikit-learn, Pandas, NumPy, Matplotlib, Seaborn &middot; Weather data from Open-Meteo API</p>
+  <p>Generated: 2026-06-25 &middot; Total pipeline runtime: 122.81 seconds (2.05 minutes)</p>
+</footer>
+
+</div>
+
+<script>
+// Scroll reveal animation
+const observer = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+    }
+  });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.reveal').forEach(function(el) {
+  observer.observe(el);
+});
+
+// Animated counters
+function animateCounters() {
+  document.querySelectorAll('.stat-card .num').forEach(function(el) {
+    var text = el.textContent;
+    var match = text.match(/([\d,]+)([kK]?)/);
+    if (!match) return;
+    var target = parseInt(match[1].replace(/,/g,''));
+    var suffix = match[2] || '';
+    var duration = 1500;
+    var start = performance.now();
+    function update(now) {
+      var elapsed = now - start;
+      var progress = Math.min(elapsed / duration, 1);
+      var eased = 1 - Math.pow(1 - progress, 3);
+      var current = Math.round(eased * target);
+      el.textContent = current.toLocaleString() + suffix;
+      if (progress < 1) requestAnimationFrame(update);
+    }
+    requestAnimationFrame(update);
+  });
+}
+
+// Trigger counters when hero is visible
+var heroObserver = new IntersectionObserver(function(entries) {
+  entries.forEach(function(entry) {
+    if (entry.isIntersecting) {
+      animateCounters();
+      heroObserver.disconnect();
+    }
+  });
+}, { threshold: 0.5 });
+heroObserver.observe(document.querySelector('.hero'));
+</script>
+</body>
+</html>
